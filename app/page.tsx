@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import ChatInterface from '../components/Chat-interface';
+import ChatInterface from '../components/ChatInterface';
 
 interface Message {
   id: string;
