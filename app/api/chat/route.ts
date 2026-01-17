@@ -1,37 +1,44 @@
-import { generateText } from 'ai';
+// route.ts
+import { generateText, type ModelMessage } from 'ai';
 import { groq } from '@ai-sdk/groq';
+import { SYSTEM_PROMPT } from '@/app/system-prompt';
 
-interface MessageRequest {
-  role: 'user' | 'assistant';
-  content: string;
-}
+const ALLOWED_ROLES: Array<ModelMessage['role']> = ['system', 'user', 'assistant', 'tool'];
 
 export async function POST(request: Request) {
   try {
-    const { messages } = await request.json() as { messages: MessageRequest[] };
+    const { messages } = await request.json() as { messages: ModelMessage[] };
 
     if (!messages || messages.length === 0) {
+      return Response.json({ error: 'No messages provided' }, { status: 400 });
+    }
+
+    // Validar roles
+    const invalid = messages.filter(m => !ALLOWED_ROLES.includes(m.role));
+    if (invalid.length > 0) {
       return Response.json(
-        { error: 'No messages provided' },
+        { error: `Invalid role(s) detected: ${invalid.map(m => m.role).join(', ')}` },
         { status: 400 }
       );
     }
 
-    // Llamar a Groq para generar una respuesta
-    // <CHANGE> Cambié el modelo a llama-3.3-70b-versatile (modelo actual de Groq)
+    // Combinar SYSTEM PROMPT + historial del usuario
+    const finalMessages: ModelMessage[] = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...messages,
+    ];
+
+    // Llamar al modelo con tu configuración personalizada
     const { text } = await generateText({
       model: groq('llama-3.3-70b-versatile'),
-      messages,
+      messages: finalMessages,
+      temperature: 0.2,
     });
 
-    return Response.json({
-      content: text,
-    });
+    return Response.json({ content: text });
+
   } catch (error) {
     console.error('Error in chat API:', error);
-    return Response.json(
-      { error: 'Error processing chat request' },
-      { status: 500 }
-    );
+    return Response.json({ error: 'Error processing chat request' }, { status: 500 });
   }
 }

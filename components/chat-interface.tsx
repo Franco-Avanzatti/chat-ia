@@ -1,9 +1,10 @@
+// app/components/Chat-interface.tsx
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import ChatMessage from './chat-message';
-import MessageInput from './message-input';
-import ChatHeader from './chat-header';
+import { useRef, useEffect, useState } from 'react';
+import ChatMessage from './Chat-message';
+import MessageInput from './Message-input';
+import ChatHeader from './Chat-header';
 
 interface Message {
   id: string;
@@ -12,10 +13,15 @@ interface Message {
   timestamp: Date;
 }
 
-export default function ChatInterface() {
-  const [messages, setMessages] = useState<Message[]>([]);
+interface ChatInterfaceProps {
+  messages: Message[];
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+}
+
+export default function ChatInterface({ messages, setMessages }: ChatInterfaceProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -27,11 +33,10 @@ export default function ChatInterface() {
   }, [messages]);
 
   const handleSendMessage = async (content: string) => {
-    if (!content.trim()) return;
+    if (!content.trim() || isLoading) return;
 
-    // Agregar mensaje del usuario
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       role: 'user',
       content,
       timestamp: new Date(),
@@ -41,70 +46,98 @@ export default function ChatInterface() {
     setIsLoading(true);
     setError(null);
 
+    const controller = new AbortController();
+    setAbortController(controller);
+
     try {
-      // Llamar a la API
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
-          messages: [...messages, userMessage].map((msg) => ({
-            role: msg.role,
-            content: msg.content,
-          })),
+          messages: [...messages, userMessage].map(({ role, content }) => ({ role, content })),
         }),
       });
 
-      if (!response.ok) {
+      if (!response.ok || !response.body) {
         throw new Error('Error en la respuesta de la API');
       }
 
-      const data = await response.json();
+      // Creamos el mensaje del asistente y vamos acumulando el streaming
+      const assistantId = crypto.randomUUID();
+      let accumulated = '';
 
-      // Agregar respuesta de la IA
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: data.content,
-        timestamp: new Date(),
-      };
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantId, role: 'assistant', content: '', timestamp: new Date() },
+      ]);
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        accumulated += chunk;
+
+        // Actualizamos solo el mensaje del asistente actual
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, content: accumulated } : m
+          )
+        );
+      }
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Error desconocido ocurrió'
-      );
+      if ((err as any).name === 'AbortError') {
+        setError('Generación detenida por el usuario');
+      } else {
+        setError(err instanceof Error ? err.message : 'Error desconocido ocurrió');
+      }
       console.error('Error:', err);
     } finally {
       setIsLoading(false);
+      setAbortController(null);
     }
   };
 
+  const handleCancel = () => {
+    abortController?.abort();
+    setAbortController(null);
+    setIsLoading(false);
+  };
+
   return (
-    <div className="flex h-full flex-col bg-slate-800">
-      {/* Header */}
+    <div className="flex h-full flex-col bg-[var(--surface-1)]">
       <ChatHeader />
 
-      {/* Messages Area */}
+      {/* Área de mensajes */}
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
-        {messages.length === 0 && !error && (
+        {!messages.length && !error && !isLoading && (
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
-              <h2 className="mb-2 text-2xl font-bold text-white">
+              <h2 className="mb-2 text-2xl font-bold text-[var(--text-primary)]">
                 Bienvenido al Chat IA
               </h2>
-              <p className="text-slate-400">
-                Comienza escribiendo tu primer mensaje
+              <p className="text-[var(--text-secondary)]">
+                Comenzá escribiendo tu primer mensaje
               </p>
             </div>
           </div>
         )}
 
         {error && (
-          <div className="mb-4 rounded-lg bg-red-500/10 p-4 text-red-400">
-            <p className="font-semibold">Error:</p>
-            <p>{error}</p>
+          <div className="mb-4 rounded-[var(--radius-md)] bg-[#ef4444]/12 p-4 text-[#ef4444] border border-[#ef4444]/30">
+            <p className="font-semibold">Error</p>
+            <p className="text-sm">{error}</p>
+            <div className="mt-2">
+              <button
+                onClick={() => setError(null)}
+                className="text-xs underline text-[var(--text-secondary)] hover:text-[var(--primary)]"
+              >
+                Ocultar
+              </button>
+            </div>
           </div>
         )}
 
@@ -113,22 +146,29 @@ export default function ChatInterface() {
         ))}
 
         {isLoading && (
-          <div className="mb-4 flex justify-start">
-            <div className="rounded-lg bg-slate-700 p-4 text-slate-300">
+          <div className="mb-4 flex items-center gap-3" aria-live="polite">
+            <div className="rounded-[var(--radius-md)] bg-[var(--surface-2)] p-4 text-[var(--text-secondary)] border border-[var(--border)]">
               <div className="flex space-x-2">
-                <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400"></div>
-                <div className="animation-delay-100 h-2 w-2 animate-bounce rounded-full bg-slate-400"></div>
-                <div className="animation-delay-200 h-2 w-2 animate-bounce rounded-full bg-slate-400"></div>
+                <div className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-secondary)]"></div>
+                <div className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-secondary)] [animation-delay:120ms]"></div>
+                <div className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-secondary)] [animation-delay:240ms]"></div>
               </div>
             </div>
+            <button
+              onClick={handleCancel}
+              className="text-xs rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-[var(--text-secondary)] hover:bg-[var(--surface-3)]"
+              aria-label="Detener generación"
+            >
+              Detener
+            </button>
           </div>
         )}
 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
-      <div className="border-t border-slate-700 bg-slate-800 p-4 md:p-6">
+      {/* Área de input */}
+      <div className="border-t border-[var(--border)] bg-[var(--surface-1)] p-4 md:p-6">
         <MessageInput onSendMessage={handleSendMessage} isLoading={isLoading} />
       </div>
     </div>
