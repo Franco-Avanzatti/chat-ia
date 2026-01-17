@@ -1,4 +1,3 @@
-// app/components/Chat-interface.tsx
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
@@ -18,10 +17,22 @@ interface ChatInterfaceProps {
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
 }
 
-export default function ChatInterface({ messages, setMessages }: ChatInterfaceProps) {
+/**
+ * Type guard para detectar AbortError sin usar `any`
+ */
+function isAbortError(error: unknown): error is DOMException {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+export default function ChatInterface({
+  messages,
+  setMessages,
+}: ChatInterfaceProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [abortController, setAbortController] =
+    useState<AbortController | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -55,7 +66,10 @@ export default function ChatInterface({ messages, setMessages }: ChatInterfacePr
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
-          messages: [...messages, userMessage].map(({ role, content }) => ({ role, content })),
+          messages: [...messages, userMessage].map(({ role, content }) => ({
+            role,
+            content,
+          })),
         }),
       });
 
@@ -63,13 +77,17 @@ export default function ChatInterface({ messages, setMessages }: ChatInterfacePr
         throw new Error('Error en la respuesta de la API');
       }
 
-      // Creamos el mensaje del asistente y vamos acumulando el streaming
       const assistantId = crypto.randomUUID();
       let accumulated = '';
 
       setMessages((prev) => [
         ...prev,
-        { id: assistantId, role: 'assistant', content: '', timestamp: new Date() },
+        {
+          id: assistantId,
+          role: 'assistant',
+          content: '',
+          timestamp: new Date(),
+        },
       ]);
 
       const reader = response.body.getReader();
@@ -78,22 +96,25 @@ export default function ChatInterface({ messages, setMessages }: ChatInterfacePr
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+
         const chunk = decoder.decode(value, { stream: true });
         accumulated += chunk;
 
-        // Actualizamos solo el mensaje del asistente actual
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId ? { ...m, content: accumulated } : m
           )
         );
       }
-    } catch (err) {
-      if ((err as any).name === 'AbortError') {
+    } catch (err: unknown) {
+      if (isAbortError(err)) {
         setError('Generación detenida por el usuario');
+      } else if (err instanceof Error) {
+        setError(err.message);
       } else {
-        setError(err instanceof Error ? err.message : 'Error desconocido ocurrió');
+        setError('Error desconocido ocurrió');
       }
+
       console.error('Error:', err);
     } finally {
       setIsLoading(false);
@@ -127,7 +148,7 @@ export default function ChatInterface({ messages, setMessages }: ChatInterfacePr
         )}
 
         {error && (
-          <div className="mb-4 rounded-[var(--radius-md)] bg-[#ef4444]/12 p-4 text-[#ef4444] border border-[#ef4444]/30">
+          <div className="mb-4 rounded-[var(--radius-md)] border border-[#ef4444]/30 bg-[#ef4444]/12 p-4 text-[#ef4444]">
             <p className="font-semibold">Error</p>
             <p className="text-sm">{error}</p>
             <div className="mt-2">
@@ -147,16 +168,17 @@ export default function ChatInterface({ messages, setMessages }: ChatInterfacePr
 
         {isLoading && (
           <div className="mb-4 flex items-center gap-3" aria-live="polite">
-            <div className="rounded-[var(--radius-md)] bg-[var(--surface-2)] p-4 text-[var(--text-secondary)] border border-[var(--border)]">
+            <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-2)] p-4 text-[var(--text-secondary)]">
               <div className="flex space-x-2">
-                <div className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-secondary)]"></div>
-                <div className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-secondary)] [animation-delay:120ms]"></div>
-                <div className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-secondary)] [animation-delay:240ms]"></div>
+                <div className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-secondary)]" />
+                <div className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-secondary)] [animation-delay:120ms]" />
+                <div className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-secondary)] [animation-delay:240ms]" />
               </div>
             </div>
+
             <button
               onClick={handleCancel}
-              className="text-xs rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-[var(--text-secondary)] hover:bg-[var(--surface-3)]"
+              className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--text-secondary)] hover:bg-[var(--surface-3)]"
               aria-label="Detener generación"
             >
               Detener

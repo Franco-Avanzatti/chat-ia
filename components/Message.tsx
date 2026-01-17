@@ -1,4 +1,3 @@
-// compon// app/components/Message.tsx
 import { renderSafeMarkdown } from '@/utils/markdown';
 
 type Props = { content: string };

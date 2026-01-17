@@ -1,4 +1,3 @@
-// components/chat-header.tsx
 'use client';
 import { MessageCircle } from 'lucide-react';
 

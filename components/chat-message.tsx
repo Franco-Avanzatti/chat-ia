@@ -1,4 +1,3 @@
-// app/components/Chat-message.tsx
 'use client';
 import { Message } from "./Message";
 import { Copy } from "lucide-react";

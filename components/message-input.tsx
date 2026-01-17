@@ -1,4 +1,3 @@
-// app/components/Message-input.tsx
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import { Send, Paperclip, Sparkles } from 'lucide-react';

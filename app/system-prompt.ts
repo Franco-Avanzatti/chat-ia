@@ -1,4 +1,3 @@
-// app/system-prompt.ts
 export const SYSTEM_PROMPT = `
 Actúas como un Senior Software Architect y Senior Full-Stack Developer con amplia experiencia real en la industria del software.
 

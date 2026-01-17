@@ -1,4 +1,3 @@
-// app/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -11,20 +10,27 @@ interface Message {
   timestamp: Date;
 }
 
-export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([]);
+function loadMessages(): Message[] {
+  if (typeof window === 'undefined') return [];
 
-  // Persistencia local
-  useEffect(() => {
+  try {
     const raw = localStorage.getItem('michat:messages');
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as Message[];
-        setMessages(parsed.map(m => ({ ...m, timestamp: new Date(m.timestamp) })));
-      } catch {}
-    }
-  }, []);
+    if (!raw) return [];
 
+    const parsed = JSON.parse(raw) as Message[];
+    return parsed.map(m => ({
+      ...m,
+      timestamp: new Date(m.timestamp),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export default function Home() {
+  const [messages, setMessages] = useState<Message[]>(loadMessages);
+
+  // Persistencia local (esto está perfecto)
   useEffect(() => {
     localStorage.setItem('michat:messages', JSON.stringify(messages));
   }, [messages]);
